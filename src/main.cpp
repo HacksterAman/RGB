@@ -16,7 +16,9 @@ float cal_LED2_R = 1.0;
 float cal_LED2_G = 0.85;
 float cal_LED2_B = 0.95;
 
-int speedDelay = 10; // Default delay in milliseconds
+// Persistent state
+int speedDelay = 10;   // Default delay in milliseconds
+int currentEffect = 0; // Default: 0 (off/static color), 1-9 for effects
 
 void processCommand(String cmd);
 
@@ -49,122 +51,127 @@ void setColor(int r1, int g1, int b1, int r2, int g2, int b2)
     analogWrite(LED2_B, adj_b2);
 }
 
-// Existing Effects
+// Effects (modified to loop or be non-blocking where needed)
 void staticGlow()
 {
-    setColor(1023, 0, 0, 0, 0, 1023);
-    delay(2000);
+    setColor(1023, 0, 0, 0, 0, 1023); // Persistent static color
 }
 
 void breathingEffect()
 {
-    for (int i = 0; i <= 1023; i += 10)
+    static int i = 0;
+    static bool increasing = true;
+    if (increasing)
     {
         setColor(i, 0, 1023 - i, 1023 - i, 0, i);
-        delay(speedDelay);
+        i += 10;
+        if (i > 1023)
+            increasing = false;
     }
-    for (int i = 1023; i >= 0; i -= 10)
+    else
     {
         setColor(i, 0, 1023 - i, 1023 - i, 0, i);
-        delay(speedDelay);
+        i -= 10;
+        if (i < 0)
+            increasing = true;
     }
+    delay(speedDelay);
 }
 
 void oppositePulse()
 {
-    for (int i = 0; i <= 1023; i += 10)
-    {
-        setColor(i, 1023 - i, 0, 1023 - i, i, 0);
-        delay(speedDelay);
-    }
+    static int i = 0;
+    setColor(i, 1023 - i, 0, 1023 - i, i, 0);
+    i = (i + 10) % 1024; // Loops from 0 to 1023
+    delay(speedDelay);
 }
 
 void rainbowCycle()
 {
-    for (int i = 0; i < 1023; i += 10)
+    static int i = 0;
+    if (i < 1023)
     {
         setColor(i, 1023 - i, 0, 0, i, 1023 - i);
-        delay(speedDelay);
     }
-    for (int i = 1023; i > 0; i -= 10)
+    else
     {
-        setColor(i, 0, 1023 - i, 1023 - i, 1023, 0);
-        delay(speedDelay);
+        setColor(1023 - (i - 1023), 0, i - 1023, 1023 - (i - 1023), 1023, 0);
     }
+    i = (i + 10) % 2046; // Double range for full cycle
+    delay(speedDelay);
 }
 
 void waveMotion()
 {
-    for (int i = 0; i <= 1023; i += 10)
+    static int i = 0;
+    if (i < 1023)
     {
         setColor(i, 0, 1023 - i, 0, i, 1023 - i);
-        delay(speedDelay);
     }
-    for (int i = 1023; i >= 0; i -= 10)
+    else
     {
-        setColor(i, 1023, 0, i, 0, 1023);
-        delay(speedDelay);
+        setColor(1023 - (i - 1023), 1023, 0, 1023 - (i - 1023), 0, 1023);
     }
+    i = (i + 10) % 2046;
+    delay(speedDelay);
 }
 
-// New Effects
 void colorChase()
 {
+    static int step = 0;
     int colors[][3] = {{1023, 0, 0}, {0, 1023, 0}, {0, 0, 1023}, {1023, 1023, 0}};
     int numColors = 4;
-    for (int i = 0; i < numColors; i++)
-    {
-        setColor(colors[i][0], colors[i][1], colors[i][2], 0, 0, 0);
-        delay(speedDelay * 10);
-        int nextColor = (i + 1) % numColors;
-        setColor(colors[nextColor][0], colors[nextColor][1], colors[nextColor][2],
-                 colors[i][0], colors[i][1], colors[i][2]);
-        delay(speedDelay * 10);
-    }
+    int current = step / 10 % numColors;
+    int next = (current + 1) % numColors;
+    setColor(colors[next][0], colors[next][1], colors[next][2],
+             colors[current][0], colors[current][1], colors[current][2]);
+    step = (step + 1) % (numColors * 10); // Slower transition
+    delay(speedDelay);
 }
 
 void randomFlicker()
 {
-    for (int i = 0; i < 100; i++)
-    {
-        int r1 = random(0, 1024);
-        int g1 = random(0, 1024);
-        int b1 = random(0, 1024);
-        int r2 = random(0, 1024);
-        int g2 = random(0, 1024);
-        int b2 = random(0, 1024);
-        setColor(r1, g1, b1, r2, g2, b2);
-        delay(speedDelay);
-    }
+    int r1 = random(0, 1024);
+    int g1 = random(0, 1024);
+    int b1 = random(0, 1024);
+    int r2 = random(0, 1024);
+    int g2 = random(0, 1024);
+    int b2 = random(0, 1024);
+    setColor(r1, g1, b1, r2, g2, b2);
+    delay(speedDelay);
 }
 
-void colorWipe(int r_start, int g_start, int b_start, int r_end, int g_end, int b_end)
+void colorWipe()
 {
-    for (int i = 0; i <= 100; i++)
-    {
-        int r = map(i, 0, 100, r_start, r_end);
-        int g = map(i, 0, 100, g_start, g_end);
-        int b = map(i, 0, 100, b_start, b_end);
-        setColor(r, g, b, r, g, b);
-        delay(speedDelay);
-    }
+    static int i = 0;
+    int r = map(i, 0, 100, 1023, 0);
+    int g = map(i, 0, 100, 0, 0);
+    int b = map(i, 0, 100, 0, 1023);
+    setColor(r, g, b, r, g, b);
+    i = (i + 1) % 101; // Loops from red to blue
+    delay(speedDelay);
 }
 
 void strobe()
 {
-    for (int i = 0; i < 20; i++)
+    static bool on = false;
+    if (on)
     {
-        setColor(1023, 1023, 1023, 1023, 1023, 1023);
-        delay(speedDelay);
-        setColor(0, 0, 0, 0, 0, 0);
-        delay(speedDelay);
+        setColor(1023, 1023, 1023, 1023, 1023, 1023); // White
     }
+    else
+    {
+        setColor(0, 0, 0, 0, 0, 0); // Off
+    }
+    on = !on;
+    delay(speedDelay);
 }
 
 String command = "";
 
 void loop()
 {
+    // Handle serial input
     if (Serial.available())
     {
         char c = Serial.read();
@@ -178,6 +185,40 @@ void loop()
             command += c;
         }
     }
+
+    // Run the current effect persistently
+    switch (currentEffect)
+    {
+    case 1:
+        staticGlow();
+        break;
+    case 2:
+        breathingEffect();
+        break;
+    case 3:
+        oppositePulse();
+        break;
+    case 4:
+        rainbowCycle();
+        break;
+    case 5:
+        waveMotion();
+        break;
+    case 6:
+        colorChase();
+        break;
+    case 7:
+        randomFlicker();
+        break;
+    case 8:
+        colorWipe();
+        break;
+    case 9:
+        strobe();
+        break;
+    default:
+        break; // 0 or invalid: static color persists
+    }
 }
 
 void processCommand(String cmd)
@@ -188,39 +229,7 @@ void processCommand(String cmd)
 
     if (cmd.startsWith("effect"))
     {
-        int effectNum = cmd.substring(6).toInt();
-        switch (effectNum)
-        {
-        case 1:
-            staticGlow();
-            break;
-        case 2:
-            breathingEffect();
-            break;
-        case 3:
-            oppositePulse();
-            break;
-        case 4:
-            rainbowCycle();
-            break;
-        case 5:
-            waveMotion();
-            break;
-        case 6:
-            colorChase();
-            break;
-        case 7:
-            randomFlicker();
-            break;
-        case 8:
-            colorWipe(1023, 0, 0, 0, 0, 1023);
-            break;
-        case 9:
-            strobe();
-            break;
-        default:
-            break;
-        }
+        currentEffect = cmd.substring(6).toInt();
     }
     else if (cmd.startsWith("speed"))
     {
@@ -232,5 +241,6 @@ void processCommand(String cmd)
         int g = cmd.substring(10, 13).toInt() * 4;
         int b = cmd.substring(14, 17).toInt() * 4;
         setColor(r, g, b, r, g, b);
+        currentEffect = 0; // Static color mode
     }
 }
