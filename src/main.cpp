@@ -8,19 +8,13 @@
 #define LED2_G 15 // D8
 #define LED2_B 13 // D7
 
-// Calibration factors (adjust based on your LEDs)
-float cal_LED1_R = 1.0;
-float cal_LED1_G = 0.8;
-float cal_LED1_B = 0.9;
-float cal_LED2_R = 1.0;
-float cal_LED2_G = 0.85;
-float cal_LED2_B = 0.95;
+int spd = 50;
+int eff = 0;
+const int MAX_DELAY = 100;
+const int MIN_DELAY = 1;
+unsigned long prevMillis = 0;
 
-// Persistent state
-int speedDelay = 10;   // Default delay in milliseconds
-int currentEffect = 0; // Default: 0 (off/static color), 1-9 for effects
-
-void processCommand(String cmd);
+void processCmd(String cmd);
 
 void setup()
 {
@@ -34,194 +28,208 @@ void setup()
     pinMode(LED2_B, OUTPUT);
 }
 
-void setColor(int r1, int g1, int b1, int r2, int g2, int b2)
+void setColor(int L1R, int L1G, int L1B, int L2R, int L2G, int L2B)
 {
-    int adj_r1 = min(1023, int(r1 * cal_LED1_R));
-    int adj_g1 = min(1023, int(g1 * cal_LED1_G));
-    int adj_b1 = min(1023, int(b1 * cal_LED1_B));
-    int adj_r2 = min(1023, int(r2 * cal_LED2_R));
-    int adj_g2 = min(1023, int(g2 * cal_LED2_G));
-    int adj_b2 = min(1023, int(b2 * cal_LED2_B));
-
-    analogWrite(LED1_R, adj_r1);
-    analogWrite(LED1_G, adj_g1);
-    analogWrite(LED1_B, adj_b1);
-    analogWrite(LED2_R, adj_r2);
-    analogWrite(LED2_G, adj_g2);
-    analogWrite(LED2_B, adj_b2);
-}
-
-// Effects (modified to loop or be non-blocking where needed)
-void staticGlow()
-{
-    setColor(1023, 0, 0, 0, 0, 1023); // Persistent static color
+    analogWrite(LED1_R, L1R);
+    analogWrite(LED1_G, L1G);
+    analogWrite(LED1_B, L1B);
+    analogWrite(LED2_R, L2R);
+    analogWrite(LED2_G, L2G);
+    analogWrite(LED2_B, L2B);
 }
 
 void breathingEffect()
 {
     static int i = 0;
-    static bool increasing = true;
-    if (increasing)
+    static bool inc = true;
+    unsigned long currMillis = millis();
+    int delayMs = map(spd, 0, 100, MAX_DELAY, MIN_DELAY);
+    if (currMillis - prevMillis >= delayMs)
     {
-        setColor(i, 0, 1023 - i, 1023 - i, 0, i);
-        i += 10;
-        if (i > 1023)
-            increasing = false;
+        if (inc)
+        {
+            setColor(i, 255 - i, 0, 255 - i, 0, i); // Added green
+            i += 2;
+            if (i > 255)
+                inc = false;
+        }
+        else
+        {
+            setColor(i, 255 - i, 0, 255 - i, 0, i);
+            i -= 2;
+            if (i < 0)
+                inc = true;
+        }
+        prevMillis = currMillis;
     }
-    else
-    {
-        setColor(i, 0, 1023 - i, 1023 - i, 0, i);
-        i -= 10;
-        if (i < 0)
-            increasing = true;
-    }
-    delay(speedDelay);
 }
 
 void oppositePulse()
 {
     static int i = 0;
-    setColor(i, 1023 - i, 0, 1023 - i, i, 0);
-    i = (i + 10) % 1024; // Loops from 0 to 1023
-    delay(speedDelay);
+    unsigned long currMillis = millis();
+    int delayMs = map(spd, 0, 100, MAX_DELAY, MIN_DELAY);
+    if (currMillis - prevMillis >= delayMs)
+    {
+        setColor(i, 255 - i, (i + 128) % 256, 255 - i, i, (i + 128) % 256); // Added blue
+        i = (i + 2) % 256;
+        prevMillis = currMillis;
+    }
 }
 
 void rainbowCycle()
 {
     static int i = 0;
-    if (i < 1023)
+    unsigned long currMillis = millis();
+    int delayMs = map(spd, 0, 100, MAX_DELAY, MIN_DELAY);
+    if (currMillis - prevMillis >= delayMs)
     {
-        setColor(i, 1023 - i, 0, 0, i, 1023 - i);
+        if (i < 255)
+            setColor(i, 255 - i, 0, 0, i, 255 - i);
+        else if (i < 510)
+            setColor(255 - (i - 255), 0, i - 255, 255 - (i - 255), 255, 0);
+        else
+            setColor(255, 255, 255 - (i - 510), 255 - (i - 510), 255, 255); // Added white
+        i = (i + 2) % 765;
+        prevMillis = currMillis;
     }
-    else
-    {
-        setColor(1023 - (i - 1023), 0, i - 1023, 1023 - (i - 1023), 1023, 0);
-    }
-    i = (i + 10) % 2046; // Double range for full cycle
-    delay(speedDelay);
 }
 
 void waveMotion()
 {
     static int i = 0;
-    if (i < 1023)
+    unsigned long currMillis = millis();
+    int delayMs = map(spd, 0, 100, MAX_DELAY, MIN_DELAY);
+    if (currMillis - prevMillis >= delayMs)
     {
-        setColor(i, 0, 1023 - i, 0, i, 1023 - i);
+        if (i < 255)
+            setColor(i, 0, 255 - i, 0, i, 255 - i);
+        else if (i < 510)
+            setColor(255 - (i - 255), 255, 0, 255 - (i - 255), 0, 255);
+        else
+            setColor(255, 255 - (i - 510), 255 - (i - 510), 255 - (i - 510), 255, 255); // Added white
+        i = (i + 2) % 765;
+        prevMillis = currMillis;
     }
-    else
-    {
-        setColor(1023 - (i - 1023), 1023, 0, 1023 - (i - 1023), 0, 1023);
-    }
-    i = (i + 10) % 2046;
-    delay(speedDelay);
 }
 
 void colorChase()
 {
     static int step = 0;
-    int colors[][3] = {{1023, 0, 0}, {0, 1023, 0}, {0, 0, 1023}, {1023, 1023, 0}};
-    int numColors = 4;
-    int current = step / 10 % numColors;
-    int next = (current + 1) % numColors;
-    setColor(colors[next][0], colors[next][1], colors[next][2],
-             colors[current][0], colors[current][1], colors[current][2]);
-    step = (step + 1) % (numColors * 10); // Slower transition
-    delay(speedDelay);
+    unsigned long currMillis = millis();
+    int delayMs = map(spd, 0, 100, MAX_DELAY, MIN_DELAY) * 5;
+    if (currMillis - prevMillis >= delayMs)
+    {
+        int colors[][3] = {{255, 0, 0}, {0, 255, 0}, {0, 0, 255}, {255, 255, 0}, {0, 255, 255}, {255, 0, 255}, {255, 255, 255}};
+        int numColors = 7;
+        int curr = step % numColors;
+        int next = (curr + 1) % numColors;
+        setColor(colors[next][0], colors[next][1], colors[next][2],
+                 colors[curr][0], colors[curr][1], colors[curr][2]);
+        step = (step + 1) % numColors;
+        prevMillis = currMillis;
+    }
 }
 
 void randomFlicker()
 {
-    int r1 = random(0, 1024);
-    int g1 = random(0, 1024);
-    int b1 = random(0, 1024);
-    int r2 = random(0, 1024);
-    int g2 = random(0, 1024);
-    int b2 = random(0, 1024);
-    setColor(r1, g1, b1, r2, g2, b2);
-    delay(speedDelay);
+    unsigned long currMillis = millis();
+    int delayMs = map(spd, 0, 100, MAX_DELAY, MIN_DELAY);
+    if (currMillis - prevMillis >= delayMs)
+    {
+        setColor(random(0, 256), random(0, 256), random(0, 256),
+                 random(0, 256), random(0, 256), random(0, 256));
+        prevMillis = currMillis;
+    }
 }
 
 void colorWipe()
 {
     static int i = 0;
-    int r = map(i, 0, 100, 1023, 0);
-    int g = map(i, 0, 100, 0, 0);
-    int b = map(i, 0, 100, 0, 1023);
-    setColor(r, g, b, r, g, b);
-    i = (i + 1) % 101; // Loops from red to blue
-    delay(speedDelay);
+    unsigned long currMillis = millis();
+    int delayMs = map(spd, 0, 100, MAX_DELAY, MIN_DELAY);
+    if (currMillis - prevMillis >= delayMs)
+    {
+        int r = map(i, 0, 100, 255, 0);
+        int g = map(i, 0, 100, 0, 255); // Added green
+        int b = map(i, 0, 100, 0, 255);
+        setColor(r, g, b, r, g, b);
+        i = (i + 1) % 101;
+        prevMillis = currMillis;
+    }
 }
 
 void strobe()
 {
-    static bool on = false;
-    if (on)
+    static int step = 0;
+    unsigned long currMillis = millis();
+    int delayMs = map(spd, 0, 100, MAX_DELAY, MIN_DELAY);
+    if (currMillis - prevMillis >= delayMs)
     {
-        setColor(1023, 1023, 1023, 1023, 1023, 1023); // White
+        int colors[][3] = {{255, 0, 0}, {0, 255, 0}, {0, 0, 255}, {255, 255, 255}};
+        int numColors = 4;
+        if (step % 2 == 0)
+        {
+            int c = (step / 2) % numColors;
+            setColor(colors[c][0], colors[c][1], colors[c][2], colors[c][0], colors[c][1], colors[c][2]);
+        }
+        else
+            setColor(0, 0, 0, 0, 0, 0);
+        step++;
+        prevMillis = currMillis;
     }
-    else
-    {
-        setColor(0, 0, 0, 0, 0, 0); // Off
-    }
-    on = !on;
-    delay(speedDelay);
 }
 
-String command = "";
+String cmd = "";
 
 void loop()
 {
-    // Handle serial input
     if (Serial.available())
     {
         char c = Serial.read();
         if (c == '\n')
         {
-            processCommand(command);
-            command = "";
+            processCmd(cmd);
+            cmd = "";
         }
         else
         {
-            command += c;
+            cmd += c;
         }
     }
 
-    // Run the current effect persistently
-    switch (currentEffect)
+    switch (eff)
     {
     case 1:
-        staticGlow();
-        break;
-    case 2:
         breathingEffect();
         break;
-    case 3:
+    case 2:
         oppositePulse();
         break;
-    case 4:
+    case 3:
         rainbowCycle();
         break;
-    case 5:
+    case 4:
         waveMotion();
         break;
-    case 6:
+    case 5:
         colorChase();
         break;
-    case 7:
+    case 6:
         randomFlicker();
         break;
-    case 8:
+    case 7:
         colorWipe();
         break;
-    case 9:
+    case 8:
         strobe();
         break;
     default:
-        break; // 0 or invalid: static color persists
+        break;
     }
 }
 
-void processCommand(String cmd)
+void processCmd(String cmd)
 {
     digitalWrite(BUZZER, HIGH);
     delay(100);
@@ -229,18 +237,21 @@ void processCommand(String cmd)
 
     if (cmd.startsWith("effect"))
     {
-        currentEffect = cmd.substring(6).toInt();
+        eff = cmd.substring(6).toInt();
     }
     else if (cmd.startsWith("speed"))
     {
-        speedDelay = cmd.substring(6).toInt();
+        spd = constrain(cmd.substring(6).toInt(), 0, 100);
     }
-    else if (cmd.startsWith("color"))
+    else if (cmd.startsWith("static"))
     {
-        int r = cmd.substring(6, 9).toInt() * 4;
-        int g = cmd.substring(10, 13).toInt() * 4;
-        int b = cmd.substring(14, 17).toInt() * 4;
-        setColor(r, g, b, r, g, b);
-        currentEffect = 0; // Static color mode
+        int L1R = cmd.substring(7, 10).toInt();
+        int L1G = cmd.substring(11, 14).toInt();
+        int L1B = cmd.substring(15, 18).toInt();
+        int L2R = cmd.substring(19, 22).toInt();
+        int L2G = cmd.substring(23, 26).toInt();
+        int L2B = cmd.substring(27, 30).toInt();
+        setColor(L1R, L1G, L1B, L2R, L2G, L2B);
+        eff = 0;
     }
 }
